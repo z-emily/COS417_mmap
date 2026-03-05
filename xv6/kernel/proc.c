@@ -5,10 +5,16 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "mmap.h"
 
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
+
+struct {
+  struct spinlock lock;
+  int num_refs[NPROC * MAX_MMAPS];
+} mappings;
 
 struct proc *initproc;
 

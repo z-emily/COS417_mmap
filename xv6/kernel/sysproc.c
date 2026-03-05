@@ -112,6 +112,20 @@ uint64
 sys_getmmapinfo(void)
 {
   // TODO: implement!
+  uint64 uaddr;
+  argaddr(0, &uaddr);
+
+  struct mmapinfo mmap_info = {0};
+  struct proc *p = myproc();
+  
+  mmap_info.total_mmaps = p->total_mmaps;
+  for(int i = 0; i < MAX_MMAPS; ++i) {
+    mmap_info.addr[i] = p->addrs[i];
+    mmap_info.length[i] = p->lengths[i];
+    mmap_info.n_loaded_pages[i] = p->num_pages_allocated[i];
+  }
+
+  either_copyout(1, uaddr, &mmap_info, sizeof(mmap_info));
   return 0;
 }
 

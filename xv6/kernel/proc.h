@@ -1,4 +1,5 @@
 #include "mmap.h"
+#define NUM_PAGES 512
 
 // Saved registers for kernel context switches.
 struct context {
@@ -106,4 +107,13 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  // mappings
+  uint total_mmaps;
+  void* addrs[MAX_MMAPS];                  // start add
+  uint64 lengths[MAX_MMAPS];               // length of mapping
+  uint flags[MAX_MMAPS];
+  int is_allocated[MAX_MMAPS][NUM_PAGES];
+  int num_pages_allocated[MAX_MMAPS];
+  int idx[MAX_MMAPS];                   // ID of mapping
 };
