@@ -84,6 +84,40 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+// struct mapping {
+//   uint64 addr;
+//   uint64 length;
+//   uint flags;
+//   int is_allocated[NUM_PAGES];
+//   int num_pages_allocated;
+//   int idx;
+// }
+
+struct underlying_mapping {
+  int ref_count;
+  void *physical_pages[NUM_PAGES];
+  int num_allocated;
+};
+
+struct mapping {
+  int is_mapped;
+
+  uint64 addr;
+  uint64 length;
+  uint flags;
+
+  struct underlying_mapping *shared;
+};
+
+struct free_segment {
+  // [start, end)
+  uint64 start;
+  uint64 end;
+
+  struct free_segment *prev;
+  struct free_segment *next;
+};
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -110,10 +144,12 @@ struct proc {
 
   // mappings
   uint total_mmaps;
-  void* addrs[MAX_MMAPS];                  // start add
-  uint64 lengths[MAX_MMAPS];               // length of mapping
-  uint flags[MAX_MMAPS];
-  int is_allocated[MAX_MMAPS][NUM_PAGES];
-  int num_pages_allocated[MAX_MMAPS];
-  int idx[MAX_MMAPS];                   // ID of mapping
+  struct mapping mappings[MAX_MMAPS];
+  struct free_segment *free_list_head;  // reverse address order
 };
+
+// struct {
+//   struct spinlock lock;
+//   int num_refs[NPROC * MAX_MMAPS];
+//   int num_mappings;
+// } global_mappings;

@@ -6,15 +6,11 @@
 #include "proc.h"
 #include "defs.h"
 #include "mmap.h"
+#include <stdlib.h>
 
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
-
-struct {
-  struct spinlock lock;
-  int num_refs[NPROC * MAX_MMAPS];
-} mappings;
 
 struct proc *initproc;
 
@@ -152,6 +148,13 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  // Set up free list
+  p->free_list_head = (struct free_segment*)kalloc();
+  p->free_list_head->start = 0;
+  p->free_list_head->end = TRAMPOLINE;
+  p->free_list_head->prev = NULL;
+  p->free_list_head->next = NULL;
+
   return p;
 }
 
@@ -175,6 +178,30 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+
+  // free mmap mappings
+  for(int i = 0; i < MAX_MMAPS; i++){
+    if(!p->mappings[i].is_mapped)
+      continue;
+
+    struct underlying_mapping *s = p->mappings[i].shared;
+    --s->ref_count;
+    if(s->ref_count == 0){
+      // free allocated pages
+      for(int j = 0; j < NUM_PAGES; j++){
+        if(s->physical_pages[j])
+          kfree(s->physical_pages[j]);
+      }
+      kfree(s);
+    }
+
+    p->mappings[i].is_mapped = 0;
+    p->mappings[i].shared = 0;
+    p->mappings[i].addr = 0;
+    p->mappings[i].length = 0;
+    p->mappings[i].flags = 0;
+  }
+  p->total_mmaps = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -308,6 +335,29 @@ kfork(void)
   np->state = RUNNABLE;
   release(&np->lock);
 
+  // Copy mmap information
+  np->total_mmaps = p->total_mmaps;
+  for(int i = 0; i < MAX_MMAPS; i++){
+    if(!p->mappings[i].is_mapped)
+      continue;
+
+    np->mappings[i] = p->mappings[i];
+
+    // increase underlying mapping refcount
+    struct underlying_mapping *s = p->mappings[i].shared;
+    ++s->ref_count;
+    // map all pages
+    for(int j = 0; j < NUM_PAGES; ++j){
+      if(s->physical_pages[j]){
+        uint64 va = p->mappings[i].addr + j * PGSIZE;
+        uint64 pa = (uint64)s->physical_pages[j];
+
+        if(mappages(np->pagetable, va, PGSIZE, pa, PTE_R | PTE_W | PTE_U) != 0){
+          panic("kfork");
+        }
+      }
+    }
+  }
   return pid;
 }
 
