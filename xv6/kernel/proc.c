@@ -190,8 +190,8 @@ freeproc(struct proc *p)
       // free allocated pages
       for(int j = 0; j < NUM_PAGES; j++){
         //printf("QWWE\n");
-        //if(s->physical_pages[j])
-        //  kfree(s->physical_pages[j]);
+        //if(s->phys_pages->pages[j])
+        //  kfree(s->phys_pages->pages[j]);
       }
       //printf("QWW\n");
       kfree(s);
@@ -350,9 +350,9 @@ kfork(void)
     ++s->ref_count;
     // map all pages
     for(int j = 0; j < NUM_PAGES; ++j){
-      if(s->physical_pages[j]){
+      if(s->phys_pages->pages[j]){
         uint64 va = p->mappings[i].addr + j * PGSIZE;
-        uint64 pa = (uint64)s->physical_pages[j];
+        uint64 pa = (uint64)s->phys_pages->pages[j];
 
         if(mappages(np->pagetable, va, PGSIZE, pa, PTE_R | PTE_W | PTE_U) != 0){
           panic("kfork");

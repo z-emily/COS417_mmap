@@ -93,10 +93,14 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 //   int idx;
 // }
 
+struct physical_pages {
+  void *pages[NUM_PAGES];
+};
+
 struct underlying_mapping {
   int ref_count;
-  void *physical_pages[NUM_PAGES];
   int num_allocated;
+  struct physical_pages *phys_pages;
 };
 
 struct mapping {
