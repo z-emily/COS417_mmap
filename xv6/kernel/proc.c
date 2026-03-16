@@ -158,6 +158,7 @@ found:
   p->slots = (struct free_mem_space*)kalloc();
   if(!p->slots)
     panic("kalloc failed");
+  memset(p->slots, 0, PGSIZE);
 
   struct free_segment *segs = (struct free_segment *)(p->slots + 1);
   for(int i = 0; i < MAX_MMAPS + 1; ++i){
