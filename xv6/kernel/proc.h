@@ -123,7 +123,7 @@ struct free_segment {
 };
 
 struct free_mem_space {
-  struct free_segment *free_segments[MAX_MMAPS + 1];
+  struct free_segment *free_segments[MAX_MMAPS + 2];
 };
 
 // Per-process state

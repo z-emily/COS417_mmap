@@ -170,12 +170,16 @@ add_to_mappings(struct proc *p, uint64 addr, int length, int flags) {
       struct underlying_mapping *s = kalloc();
       if(s == 0)
         panic("kalloc underlying_mapping");
-      //memset(s, 0, PGSIZE);
+      memset(s, 0, PGSIZE);
+
       s->ref_count = 1;
       s->num_allocated = 0;
+
       s->phys_pages = kalloc();
       if(s->phys_pages == 0)
         panic("kalloc underlying mapping");
+      memset(s->phys_pages, 0, PGSIZE);
+
       for(int i = 0; i < NUM_PAGES; ++i)
         s->phys_pages->pages[i] = 0;
 
@@ -193,6 +197,28 @@ add_to_mappings(struct proc *p, uint64 addr, int length, int flags) {
   }
 }
 
+struct free_segment *create_segment(struct proc *p){
+  for(int i = 0; i < MAX_MMAPS + 2; ++i){
+    struct free_segment *seg = p->slots->free_segments[i];
+    printf("start, %lu", seg->start);
+    printf("end, %lu", seg->end);
+    if(!seg->start && !seg->end){
+      return seg;
+    }
+  }
+  return NULL;
+}
+
+void print_free_segs(struct proc *p) {
+  struct free_segment *seg = p->free_list_head;
+  printf("PRINT SEGMENTS: ");
+  while(seg){
+    printf("[%lx, %lx)\n", seg->start, seg->end);
+    seg = seg->next;
+  }
+  printf("END PRINT SEGMENTS\n");
+}
+
 uint64
 sys_mmap(void)
 {
@@ -207,8 +233,13 @@ sys_mmap(void)
 
   // Check process max maps
   struct proc *p = myproc();
+
+  printf("MMAP %lx %x\n", addr, length);
+  printf("Segments at start:\n");
+  print_free_segs(p);
+
   if(p->total_mmaps >= MAX_MMAPS) {
-    //printf("hi\n");
+    printf("211\n");
     return 0;
   }
 
@@ -216,21 +247,21 @@ sys_mmap(void)
 
   // Check length
   if(length <= 0 || length > MAX_MAP_LENGTH) {
-    //printf("FAIL1\n");
+    printf("219\n");
     return 0;
   }
 
   // Check flags
   if((flags & MAP_ANONYMOUS) == 0 ||
       (flags & MAP_SHARED) == 0) {
-    //printf("FAIL2\n");
+    printf("226\n");
     return 0;
   }
 
   // Check valid address
   if(flags & MAP_FIXED &&
     (addr >= TRAPFRAME || addr < p->sz || addr % PGSIZE != 0)) {
-   //printf("FAIL3\n");
+   printf("233\n");
     return 0;
   }
 
@@ -258,16 +289,9 @@ sys_mmap(void)
         //printf("%lx\n", map_end);
         
         // Free segment is partitioned into two segments
-        struct free_segment *new_seg = NULL;
-        for(int i = 0; i < MAX_MMAPS + 1; ++i){
-          struct free_segment *seg = p->slots->free_segments[i];
-          if(!seg->start && !seg->end){
-            new_seg = seg;
-            break;
-          }
-        }
+        struct free_segment *new_seg = create_segment(p);
         if(!new_seg){
-          //printf("FAIL4\n");
+          printf("2704\n");
           return 0;
         }
         new_seg->start = map_end;
@@ -314,7 +338,7 @@ sys_mmap(void)
   //printf("END ITER\n");
   // Didn't fit at suggested address
   if(flags & MAP_FIXED) {
-    //printf("FAIL5\n");
+    printf("317\n");
     return 0;
   }
   
@@ -341,6 +365,103 @@ uint64
 sys_munmap(void)
 {
   // TODO: implement!
-  return 0;
+  uint64 addr;
+  argaddr(0, &addr);
+
+  struct proc *p = myproc();
+
+  printf("MUNMAP %lx\n", addr);
+  printf("Segments at start:\n");
+  print_free_segs(p);
+
+  for (int i = 0; i < MAX_MMAPS; ++i) {
+    struct mapping *map = &p->mappings[i];
+    // printf("359\n");
+    // if (map == NULL) {
+    //   printf("map is null");
+    // }
+    if (map->is_mapped) {
+      // printf("found a mapped one\n");
+      if (map->addr == addr) {
+        // printf("366\n");
+        // if (map->shared == NULL) {
+        //   printf("map  SHARED is null");
+        // }
+        --map->shared->ref_count;
+
+        printf("364\n");
+        // No remaining references, destroy the mapping
+        if (map->shared->ref_count == 0) {
+          //TODO: free individual pages
+          kfree(map->shared->phys_pages);
+          kfree(map->shared);
+        }
+        printf("371\n");
+
+        // Update free list
+        uint64 map_start = map->addr;
+        uint64 map_end = map_start + map->length;
+        struct free_segment *new_seg = create_segment(p);
+        printf("405\n");
+        new_seg->start = map_start;
+        new_seg->end = map_end;
+
+        struct free_segment *high_seg = p->free_list_head;
+        struct free_segment *low_seg = NULL;
+
+        printf("382\n");
+
+        // Insert new free segment into free list
+        if(high_seg->end <= map_start){
+          new_seg->prev = NULL;
+          new_seg->next = p->free_list_head;
+          p->free_list_head = new_seg;
+          high_seg->prev = new_seg;
+        }
+        printf("390\n");
+        while(high_seg) {
+          low_seg = high_seg->next;
+          if(!low_seg || low_seg->end <= map_start){
+            high_seg->next = new_seg;
+            new_seg->prev = low_seg;
+            new_seg->next = low_seg;
+            if(low_seg) low_seg->prev = new_seg;
+            break;
+          }
+          high_seg = high_seg->next;
+        }
+        printf("402\n");
+
+        // Merge adjacent free segments
+        high_seg = p->free_list_head;
+        while(high_seg){
+          low_seg = high_seg->next;
+          if(!low_seg) break;
+          if(low_seg->end == high_seg->start){
+            high_seg->start = low_seg->start;
+            remove_segment(low_seg, p);
+            continue;
+          }
+          high_seg = high_seg->next;
+        }
+        printf("415\n");
+        
+
+        // Unmap for this process
+        map->is_mapped = 0;
+        map->addr = 0;
+        map->length = 0;
+        map->flags = 0;
+        map->shared = NULL;
+        --p->total_mmaps;
+        printf("428\n");
+        
+
+        return 0;
+      }
+    }
+  }
+
+  return -1;
 }
 
