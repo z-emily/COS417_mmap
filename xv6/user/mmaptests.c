@@ -152,7 +152,7 @@ mmap_unaligned(char *s)
     printf("%s: mmap fails on properly aligned address\n", s);
     exit(1);
   }
-
+  
   // Check that mmap for an unaligned address works, as long as MAP_FIXED is not passed:
   addr = mmap((void*) 0x70000800, PGSIZE, MAP_ANONYMOUS | MAP_SHARED);
   if (!addr) {

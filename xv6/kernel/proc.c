@@ -151,7 +151,7 @@ found:
   // Set up free list
   p->free_list_head = (struct free_segment*)kalloc();
   p->free_list_head->start = 0;
-  p->free_list_head->end = TRAMPOLINE;
+  p->free_list_head->end = TRAPFRAME;
   p->free_list_head->prev = NULL;
   p->free_list_head->next = NULL;
 
@@ -189,9 +189,11 @@ freeproc(struct proc *p)
     if(s->ref_count == 0){
       // free allocated pages
       for(int j = 0; j < NUM_PAGES; j++){
-        if(s->physical_pages[j])
-          kfree(s->physical_pages[j]);
+        //printf("QWWE\n");
+        //if(s->physical_pages[j])
+        //  kfree(s->physical_pages[j]);
       }
+      //printf("QWW\n");
       kfree(s);
     }
 
