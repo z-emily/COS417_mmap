@@ -155,10 +155,11 @@ remove_segment(struct free_segment *seg, struct proc *p) {
     p->free_list_head = seg->next;
     if(seg->next) seg->next->prev = NULL;
   }
-  //printf("FQ\n");
-  if(!seg) panic("kfree null seg!");
-  kfree(seg);
-  //printf("QW\n");
+
+  seg->start = 0;
+  seg->end = 0;
+  seg->prev = NULL;
+  seg->next = NULL;
 }
 
 static void
@@ -236,7 +237,9 @@ sys_mmap(void)
   // Try fitting mapping at suggested address
   struct free_segment *seg = p->free_list_head;
   struct free_segment *candidate_segment = NULL;
+  struct free_segment *next_seg = NULL;
   while (seg) {
+    next_seg = seg->next;
     // Save highest-address candidate segment
     if(!seg->next) 
       seg->start = p->sz;
@@ -255,8 +258,15 @@ sys_mmap(void)
         //printf("%lx\n", map_end);
         
         // Free segment is partitioned into two segments
-        struct free_segment *new_seg = (struct free_segment*)kalloc();
-        if(new_seg == 0){
+        struct free_segment *new_seg = NULL;
+        for(int i = 0; i < MAX_MMAPS + 1; ++i){
+          struct free_segment *seg = p->slots->free_segments[i];
+          if(!seg->start && !seg->end){
+            new_seg = seg;
+            break;
+          }
+        }
+        if(!new_seg){
           //printf("FAIL4\n");
           return 0;
         }
@@ -299,7 +309,7 @@ sys_mmap(void)
     } /*else if(seg->end < addr && candidate_segment) {
       break;
     }*/
-    seg = seg->next;
+    seg = next_seg;
   }
   //printf("END ITER\n");
   // Didn't fit at suggested address

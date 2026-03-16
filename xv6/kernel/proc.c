@@ -147,10 +147,25 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  /*
   // Set up free list
   p->free_list_head = (struct free_segment*)kalloc();
   p->free_list_head->start = 0;
+  p->free_list_head->end = TRAPFRAME;
+  p->free_list_head->prev = NULL;
+  p->free_list_head->next = NULL;
+  */
+  p->slots = (struct free_mem_space*)kalloc();
+  if(!p->slots)
+    panic("kalloc failed");
+
+  struct free_segment *segs = (struct free_segment *)(p->slots + 1);
+  for(int i = 0; i < MAX_MMAPS + 1; ++i){
+    p->slots->free_segments[i] = &segs[i];
+  }
+
+  p->free_list_head = p->slots->free_segments[0];
+  p->free_list_head->start = PGROUNDUP(p->sz);
   p->free_list_head->end = TRAPFRAME;
   p->free_list_head->prev = NULL;
   p->free_list_head->next = NULL;

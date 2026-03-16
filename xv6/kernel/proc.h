@@ -122,6 +122,10 @@ struct free_segment {
   struct free_segment *next;
 };
 
+struct free_mem_space {
+  struct free_segment *free_segments[MAX_MMAPS + 1];
+};
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -150,6 +154,7 @@ struct proc {
   uint total_mmaps;
   struct mapping mappings[MAX_MMAPS];
   struct free_segment *free_list_head;  // reverse address order
+  struct free_mem_space *slots;
 };
 
 // struct {
