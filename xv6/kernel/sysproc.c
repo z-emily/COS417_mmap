@@ -8,7 +8,7 @@
 #include "vm.h"
 #include <stdlib.h>
 
-#define MAX_MAP_LENGTH (1 << 11)
+#define MAX_MAP_LENGTH (1 << 21)
 
 uint64
 sys_exit(void)
@@ -51,6 +51,12 @@ sys_sbrk(void)
   addr = myproc()->sz;
 
   // TODO: prevent collisions
+  for(int i = 0; i < MAX_MMAPS; ++i) {
+    if(!myproc()->mappings[i].is_mapped)
+      continue;
+    if(myproc()->mappings[i].addr < addr + n)
+      return -1;
+  }
 
   if(t == SBRK_EAGER || n < 0) {
     if(growproc(n) < 0) {
@@ -119,18 +125,23 @@ sys_getmmapinfo(void)
   // TODO: implement!
   uint64 uaddr;
   argaddr(0, &uaddr);
-
+  //printf("ok this is why yeah\n");
   struct mmapinfo mmap_info = {0};
   struct proc *p = myproc();
-  
+  //printf("hihiih\n");
   mmap_info.total_mmaps = p->total_mmaps;
+  int ctr = 0;
   for(int i = 0; i < MAX_MMAPS; ++i) {
-    mmap_info.addr[i] = (void *)p->mappings[i].addr;
-    mmap_info.length[i] = p->mappings[i].length;
-    mmap_info.n_loaded_pages[i] = p->mappings[i].shared->num_allocated;
+    if(!p->mappings[i].is_mapped)
+      continue;
+    mmap_info.addr[ctr] = (void *)p->mappings[i].addr;
+    mmap_info.length[ctr] = p->mappings[i].length;
+    mmap_info.n_loaded_pages[ctr] = p->mappings[i].shared->num_allocated;
+    ++ctr;
   }
-
+  //printf("KOFKS\n");
   either_copyout(1, uaddr, &mmap_info, sizeof(mmap_info));
+  //printf("FDS\n");
   return 0;
 }
 
@@ -144,7 +155,10 @@ remove_segment(struct free_segment *seg, struct proc *p) {
     p->free_list_head = seg->next;
     if(seg->next) seg->next->prev = NULL;
   }
+  printf("FQ\n");
+  if(!seg) panic("kfree null seg!");
   kfree(seg);
+  printf("QW\n");
 }
 
 static void
@@ -153,8 +167,13 @@ add_to_mappings(struct proc *p, uint64 addr, int length, int flags) {
     if (!p->mappings[i].is_mapped) {
 
       struct underlying_mapping *s = kalloc();
-      memset(s, 0, sizeof(*s));
+      if(s == 0)
+        panic("kalloc underlying_mapping");
+      //memset(s, 0, PGSIZE);
       s->ref_count = 1;
+      s->num_allocated = 0;
+      for(int i = 0; i < NUM_PAGES; ++i)
+        s->physical_pages[i] = 0;
 
       p->mappings[i] = (struct mapping){
         .is_mapped = 1,
@@ -185,23 +204,29 @@ sys_mmap(void)
   // Check process max maps
   struct proc *p = myproc();
   if(p->total_mmaps >= MAX_MMAPS) {
+    printf("hi\n");
     return 0;
   }
 
+  length = PGROUNDUP(length);
+
   // Check length
   if(length <= 0 || length > MAX_MAP_LENGTH) {
+    printf("FAIL1\n");
     return 0;
   }
 
   // Check flags
   if((flags & MAP_ANONYMOUS) == 0 ||
       (flags & MAP_SHARED) == 0) {
+    printf("FAIL2\n");
     return 0;
   }
 
   // Check valid address
   if(flags & MAP_FIXED &&
-    (addr >= TRAMPOLINE || addr % PGSIZE != 0 || addr < p->sz)) {
+    (addr >= TRAPFRAME || addr < p->sz || addr % PGSIZE != 0)) {
+    printf("FAIL3\n");
     return 0;
   }
 
@@ -209,24 +234,38 @@ sys_mmap(void)
   struct free_segment *seg = p->free_list_head;
   struct free_segment *candidate_segment = NULL;
   while (seg) {
-    // Save highest-address candidate segment 
+    // Save highest-address candidate segment
+    if(!seg->next) 
+      seg->start = p->sz;
     if(candidate_segment == NULL && (length <= seg->end - seg->start)) {
       candidate_segment = seg;
     }
+    printf("%lx\n", seg->start);
+    printf("%lx\n", seg->end);
 
     // Suggested address works
     if(addr >= seg->start && addr + length <= seg->end) {
       uint64 map_start = addr;
       uint64 map_end = addr + length;
       if(map_start != seg->start && map_end != seg->end) {
+        //printf("%lx\n", map_start);
+        //printf("%lx\n", map_end);
+        
         // Free segment is partitioned into two segments
         struct free_segment *new_seg = (struct free_segment*)kalloc();
-        if(new_seg == 0)
+        if(new_seg == 0){
+          printf("FAIL4\n");
           return 0;
-
+        }
         new_seg->start = map_end;
         new_seg->end = seg->end;
         seg->end = map_start;
+        printf("OPEN UPDATE\n");
+        printf("%lx\n", seg->start);
+        printf("%lx\n", seg->end);
+        printf("%lx\n", new_seg->start);
+        printf("%lx\n", new_seg->end);
+        printf("CLOSE UPDATE\n");
 
         // new_seg at higher address, comes first in free list
         if(seg->prev) {
@@ -252,18 +291,20 @@ sys_mmap(void)
 
       // add to mappings
       add_to_mappings(p, addr, length, flags);
+      printf("ALSO END ITER\n");
       return addr;
-    } else if(seg->end < addr && candidate_segment) {
+    } /*else if(seg->end < addr && candidate_segment) {
       break;
-    }
+    }*/
     seg = seg->next;
   }
-
+  printf("END ITER\n");
   // Didn't fit at suggested address
   if(flags & MAP_FIXED) {
+    printf("FAIL5\n");
     return 0;
   }
-
+  
   // Use highest-address segment
   if (candidate_segment) {
     uint64 vaddr = candidate_segment->end - length;
@@ -271,11 +312,15 @@ sys_mmap(void)
       // Entire segment consumed, delete segment
       remove_segment(candidate_segment, p);
     } else {
+      printf("sorry we got here?\n");
       candidate_segment->end = vaddr;
     }
+    printf("QF\n");
     add_to_mappings(p, vaddr, length, flags);
+    printf("Q!\n");
     return vaddr;
   }
+  printf("FAIL6\n");
   return 0;
 }
 
