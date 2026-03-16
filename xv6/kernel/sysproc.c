@@ -155,10 +155,10 @@ remove_segment(struct free_segment *seg, struct proc *p) {
     p->free_list_head = seg->next;
     if(seg->next) seg->next->prev = NULL;
   }
-  printf("FQ\n");
+  //printf("FQ\n");
   if(!seg) panic("kfree null seg!");
   kfree(seg);
-  printf("QW\n");
+  //printf("QW\n");
 }
 
 static void
@@ -172,8 +172,11 @@ add_to_mappings(struct proc *p, uint64 addr, int length, int flags) {
       //memset(s, 0, PGSIZE);
       s->ref_count = 1;
       s->num_allocated = 0;
+      s->phys_pages = kalloc();
+      if(s->phys_pages == 0)
+        panic("kalloc underlying mapping");
       for(int i = 0; i < NUM_PAGES; ++i)
-        s->physical_pages[i] = 0;
+        s->phys_pages->pages[i] = 0;
 
       p->mappings[i] = (struct mapping){
         .is_mapped = 1,
@@ -204,7 +207,7 @@ sys_mmap(void)
   // Check process max maps
   struct proc *p = myproc();
   if(p->total_mmaps >= MAX_MMAPS) {
-    printf("hi\n");
+    //printf("hi\n");
     return 0;
   }
 
@@ -212,21 +215,21 @@ sys_mmap(void)
 
   // Check length
   if(length <= 0 || length > MAX_MAP_LENGTH) {
-    printf("FAIL1\n");
+    //printf("FAIL1\n");
     return 0;
   }
 
   // Check flags
   if((flags & MAP_ANONYMOUS) == 0 ||
       (flags & MAP_SHARED) == 0) {
-    printf("FAIL2\n");
+    //printf("FAIL2\n");
     return 0;
   }
 
   // Check valid address
   if(flags & MAP_FIXED &&
     (addr >= TRAPFRAME || addr < p->sz || addr % PGSIZE != 0)) {
-    printf("FAIL3\n");
+   //printf("FAIL3\n");
     return 0;
   }
 
@@ -240,8 +243,8 @@ sys_mmap(void)
     if(candidate_segment == NULL && (length <= seg->end - seg->start)) {
       candidate_segment = seg;
     }
-    printf("%lx\n", seg->start);
-    printf("%lx\n", seg->end);
+    //printf("%lx\n", seg->start);
+    //printf("%lx\n", seg->end);
 
     // Suggested address works
     if(addr >= seg->start && addr + length <= seg->end) {
@@ -254,18 +257,18 @@ sys_mmap(void)
         // Free segment is partitioned into two segments
         struct free_segment *new_seg = (struct free_segment*)kalloc();
         if(new_seg == 0){
-          printf("FAIL4\n");
+          //printf("FAIL4\n");
           return 0;
         }
         new_seg->start = map_end;
         new_seg->end = seg->end;
         seg->end = map_start;
-        printf("OPEN UPDATE\n");
+        /*printf("OPEN UPDATE\n");
         printf("%lx\n", seg->start);
         printf("%lx\n", seg->end);
         printf("%lx\n", new_seg->start);
         printf("%lx\n", new_seg->end);
-        printf("CLOSE UPDATE\n");
+        printf("CLOSE UPDATE\n");*/
 
         // new_seg at higher address, comes first in free list
         if(seg->prev) {
@@ -291,17 +294,17 @@ sys_mmap(void)
 
       // add to mappings
       add_to_mappings(p, addr, length, flags);
-      printf("ALSO END ITER\n");
+      //printf("ALSO END ITER\n");
       return addr;
     } /*else if(seg->end < addr && candidate_segment) {
       break;
     }*/
     seg = seg->next;
   }
-  printf("END ITER\n");
+  //printf("END ITER\n");
   // Didn't fit at suggested address
   if(flags & MAP_FIXED) {
-    printf("FAIL5\n");
+    //printf("FAIL5\n");
     return 0;
   }
   
@@ -312,15 +315,15 @@ sys_mmap(void)
       // Entire segment consumed, delete segment
       remove_segment(candidate_segment, p);
     } else {
-      printf("sorry we got here?\n");
+      //printf("sorry we got here?\n");
       candidate_segment->end = vaddr;
     }
-    printf("QF\n");
+    //printf("QF\n");
     add_to_mappings(p, vaddr, length, flags);
-    printf("Q!\n");
+    //printf("Q!\n");
     return vaddr;
   }
-  printf("FAIL6\n");
+  //printf("FAIL6\n");
   return 0;
 }
 
