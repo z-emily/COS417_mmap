@@ -207,11 +207,10 @@ freeproc(struct proc *p)
     if(s->ref_count == 0){
       // free allocated pages
       for(int j = 0; j < NUM_PAGES; j++){
-        //printf("QWWE\n");
-        //if(s->phys_pages->pages[j])
-        //  kfree(s->phys_pages->pages[j]);
+        if(s->phys_pages->pages[j])
+          kfree(s->phys_pages->pages[j]);
       }
-      //printf("QWW\n");
+      kfree(s->phys_pages);
       kfree(s);
     }
 
@@ -222,6 +221,11 @@ freeproc(struct proc *p)
     p->mappings[i].flags = 0;
   }
   p->total_mmaps = 0;
+
+  if(p->slots){
+    kfree(p->slots);
+    p->slots = 0;
+  }
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -400,6 +404,9 @@ kfork(void)
       break;
     }
   }
+
+  printf("KFORKEND\n");
+
   return pid;
 }
 

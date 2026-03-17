@@ -27,7 +27,7 @@ int flags2perm(int flags)
 int
 kexec(char *path, char **argv)
 {
-  printf("KEXEC");
+  printf("KEXEC\n");
   char *s, *last;
   int i, off;
   uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;
@@ -144,7 +144,16 @@ kexec(char *path, char **argv)
     p->mappings[i].length = 0;
     p->mappings[i].flags = 0;
     if (p->mappings[i].shared) {
-      kfree(p->mappings[i].shared);
+      struct underlying_mapping *s = p->mappings[i].shared;
+      --s->ref_count;
+      if (s->ref_count == 0) {
+        for(int j = 0; j < NUM_PAGES; j++){
+          if(s->phys_pages->pages[j])
+            kfree(s->phys_pages->pages[j]);
+        }
+        kfree(s->phys_pages);
+        kfree(s);
+      }
       p->mappings[i].shared = NULL;
     }
   }
