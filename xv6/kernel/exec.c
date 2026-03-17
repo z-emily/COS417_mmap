@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 #include "elf.h"
+#include "vm.h"
 #include <stdlib.h>
 
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
@@ -129,6 +130,12 @@ kexec(char *path, char **argv)
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
     
+  // Free mappings
+  for(int i = 0; i < MAX_MMAPS; i++){
+    free_mapping(p->pagetable, &p->mappings[i]);
+  }
+  p->total_mmaps = 0;
+
   // Commit to the user image.
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
@@ -136,28 +143,6 @@ kexec(char *path, char **argv)
   p->trapframe->epc = elf.entry;  // initial program counter = ulib.c:start()
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
-
-  // Free mappings
-  for(int i = 0; i < MAX_MMAPS; i++){
-    p->mappings[i].is_mapped = 0;
-    p->mappings[i].addr = 0;
-    p->mappings[i].length = 0;
-    p->mappings[i].flags = 0;
-    if (p->mappings[i].shared) {
-      struct underlying_mapping *s = p->mappings[i].shared;
-      --s->ref_count;
-      if (s->ref_count == 0) {
-        for(int j = 0; j < NUM_PAGES; j++){
-          if(s->phys_pages->pages[j])
-            kfree(s->phys_pages->pages[j]);
-        }
-        kfree(s->phys_pages);
-        kfree(s);
-      }
-      p->mappings[i].shared = NULL;
-    }
-  }
-  p->total_mmaps = 0;
 
   // Free segments
   for(int i = 0; i < MAX_MMAPS + 2; i++){

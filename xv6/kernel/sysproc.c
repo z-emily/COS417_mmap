@@ -395,20 +395,13 @@ sys_munmap(void)
         // if (map->shared == NULL) {
         //   printf("map  SHARED is null");
         // }
-        --map->shared->ref_count;
-
-        printf("364\n");
-        // No remaining references, destroy the mapping
-        if (map->shared->ref_count == 0) {
-          //TODO: free individual pages
-          kfree(map->shared->phys_pages);
-          kfree(map->shared);
-        }
-        printf("371\n");
-
-        // Update free list
         uint64 map_start = map->addr;
         uint64 map_end = map_start + map->length;
+
+        free_mapping(p->pagetable, map);
+        --p->total_mmaps;
+
+        // Update free list
         struct free_segment *new_seg = create_segment(p);
         printf("405\n");
         new_seg->start = map_start;
@@ -459,18 +452,8 @@ sys_munmap(void)
           high_seg = high_seg->next;
           print_free_segs(p);
         }
-        printf("415\n");
-        
-
-        // Unmap for this process
-        map->is_mapped = 0;
-        map->addr = 0;
-        map->length = 0;
-        map->flags = 0;
-        map->shared = NULL;
-        --p->total_mmaps;
-        printf("428\n");
-        
+        printf("467\n");
+              
         printf("Segments at end:\n");
         print_free_segs(p);
 

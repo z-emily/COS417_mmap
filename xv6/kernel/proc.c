@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 #include "mmap.h"
+#include "vm.h"
 #include <stdlib.h>
 
 struct cpu cpus[NCPU];
@@ -176,6 +177,30 @@ found:
   return p;
 }
 
+void free_mapping(pagetable_t pagetable, struct mapping *m) {
+  if (!m->is_mapped)
+    return;
+
+  uvmunmap(pagetable, m->addr, m->length / PGSIZE, 0);
+
+  struct underlying_mapping *s = m->shared;
+  --s->ref_count;
+  if (s->ref_count == 0) {
+    for (int j = 0; j < NUM_PAGES; j++) {
+      if (s->phys_pages->pages[j])
+        kfree(s->phys_pages->pages[j]);
+    }
+    kfree(s->phys_pages);
+    kfree(s);
+  }
+
+  m->is_mapped = 0;
+  m->shared = 0;
+  m->addr = 0;
+  m->length = 0;
+  m->flags = 0;
+}
+
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
@@ -185,6 +210,18 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  // free mmap mappings
+  for(int i = 0; i < MAX_MMAPS; i++){
+    free_mapping(p->pagetable, &p->mappings[i]);
+  }
+  p->total_mmaps = 0;
+
+  if(p->slots){
+    kfree(p->slots);
+    p->slots = 0;
+  }
+
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -196,36 +233,6 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
-
-  // free mmap mappings
-  for(int i = 0; i < MAX_MMAPS; i++){
-    if(!p->mappings[i].is_mapped)
-      continue;
-
-    struct underlying_mapping *s = p->mappings[i].shared;
-    --s->ref_count;
-    if(s->ref_count == 0){
-      // free allocated pages
-      for(int j = 0; j < NUM_PAGES; j++){
-        if(s->phys_pages->pages[j])
-          kfree(s->phys_pages->pages[j]);
-      }
-      kfree(s->phys_pages);
-      kfree(s);
-    }
-
-    p->mappings[i].is_mapped = 0;
-    p->mappings[i].shared = 0;
-    p->mappings[i].addr = 0;
-    p->mappings[i].length = 0;
-    p->mappings[i].flags = 0;
-  }
-  p->total_mmaps = 0;
-
-  if(p->slots){
-    kfree(p->slots);
-    p->slots = 0;
-  }
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -371,8 +378,8 @@ kfork(void)
     // increase underlying mapping refcount
     struct underlying_mapping *s = p->mappings[i].shared;
     ++s->ref_count;
-    // map all pages
-    for(int j = 0; j < NUM_PAGES; ++j){
+    // DON'T map all pages - lazy
+    /*for(int j = 0; j < NUM_PAGES; ++j){
       if(s->phys_pages->pages[j]){
         uint64 va = p->mappings[i].addr + j * PGSIZE;
         uint64 pa = (uint64)s->phys_pages->pages[j];
@@ -381,7 +388,7 @@ kfork(void)
           panic("kfork");
         }
       }
-    }
+    }*/
   }
 
   // Copy slots with translation

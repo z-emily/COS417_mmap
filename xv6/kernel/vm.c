@@ -454,6 +454,15 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   }
 }
 
+struct mapping *find_mapping(struct proc *p, uint64 va){
+  for(int i = 0; i < MAX_MMAPS; i++){
+    struct mapping *cur = &p->mappings[i];
+    if(cur->is_mapped && va >= cur->addr && va < cur->addr + cur->length)
+      return cur;
+  }
+  return 0;
+}
+
 // allocate and map user memory if process is referencing a page
 // that was lazily allocated in sys_sbrk().
 // returns 0 if va is invalid or already mapped, or if
@@ -464,8 +473,23 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
   uint64 mem;
   struct proc *p = myproc();
 
-  if (va >= p->sz)
-    return 0;
+  if (va >= p->sz){ //loc of mmaps - actually valid
+    struct mapping *m = find_mapping(p, va);
+    if(!m) return 0;
+    //Allocate mapping if needed
+    int pgidx = (PGROUNDDOWN(va) - m->addr)/PGSIZE;
+    if(!m->shared->phys_pages->pages[pgidx]){ //alloc page
+      m->shared->phys_pages->pages[pgidx] = kalloc();
+      if(!m->shared->phys_pages->pages[pgidx]) //fail
+        return 0;
+      memset(m->shared->phys_pages->pages[pgidx], 0, PGSIZE);
+      ++m->shared->num_allocated;
+    }
+    //Map mapping, only in process p
+    mappages(pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)m->shared->phys_pages->pages[pgidx], m->flags | PTE_U);
+    return (uint64)m->shared->phys_pages->pages[pgidx];
+  }
+  
   va = PGROUNDDOWN(va);
   if(ismapped(pagetable, va)) {
     return 0;
