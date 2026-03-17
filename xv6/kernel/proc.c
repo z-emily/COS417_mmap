@@ -111,7 +111,7 @@ allocpid()
 static struct proc*
 allocproc(void)
 {
-  printf("ALLOCPROC");
+  printf("ALLOCPROC\n");
   struct proc *p;
 
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -316,7 +316,7 @@ growproc(int n)
 int
 kfork(void)
 {
-  printf("KFORK");
+  printf("KFORK\n");
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
