@@ -112,7 +112,7 @@ allocpid()
 static struct proc*
 allocproc(void)
 {
-  printf("ALLOCPROC");
+  printf("ALLOCPROC\n");
   struct proc *p;
 
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -323,7 +323,7 @@ growproc(int n)
 int
 kfork(void)
 {
-  printf("KFORK");
+  printf("KFORK\n");
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
@@ -395,13 +395,24 @@ kfork(void)
   for(int i = 0; i < MAX_MMAPS + 2; i++){
     np->slots->free_segments[i]->start = p->slots->free_segments[i]->start;
     np->slots->free_segments[i]->end = p->slots->free_segments[i]->end;
+    // Remap prev/next pointers to child's corresponding segments
     np->slots->free_segments[i]->prev = NULL;
     np->slots->free_segments[i]->next = NULL;
-    for(int j = 0; j < MAX_MMAPS + 2; j++){
-      if(p->slots->free_segments[i]->prev == p->slots->free_segments[j])
-        np->slots->free_segments[i]->prev = np->slots->free_segments[j];
-      if(p->slots->free_segments[i]->next == p->slots->free_segments[j])
-        np->slots->free_segments[i]->next = np->slots->free_segments[j];
+    if(p->slots->free_segments[i]->prev != NULL) {
+      for(int j = 0; j < MAX_MMAPS + 2; j++){
+        if(p->slots->free_segments[i]->prev == p->slots->free_segments[j]){
+          np->slots->free_segments[i]->prev = np->slots->free_segments[j];
+          break;
+        }
+      }
+    }
+    if(p->slots->free_segments[i]->next != NULL) {
+      for(int j = 0; j < MAX_MMAPS + 2; j++){
+        if(p->slots->free_segments[i]->next == p->slots->free_segments[j]){
+          np->slots->free_segments[i]->next = np->slots->free_segments[j];
+          break;
+        }
+      }
     }
   }
   np->free_list_head = NULL;

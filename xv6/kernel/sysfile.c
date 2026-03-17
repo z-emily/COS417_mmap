@@ -444,8 +444,6 @@ sys_exec(void)
   }
   memset(argv, 0, sizeof(argv));
 
-  printf("WOAH WOAH WOAH\n");
-
   for(i=0;; i++){
     if(i >= NELEM(argv)){
       goto bad;
@@ -457,9 +455,7 @@ sys_exec(void)
       argv[i] = 0;
       break;
     }
-    printf("HIER\n");
     argv[i] = kalloc();
-    printf("462\n");
     if(argv[i] == 0)
       goto bad;
     if(fetchstr(uarg, argv[i], PGSIZE) < 0)
