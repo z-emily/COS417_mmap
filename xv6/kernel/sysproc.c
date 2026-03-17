@@ -125,10 +125,8 @@ sys_getmmapinfo(void)
   // TODO: implement!
   uint64 uaddr;
   argaddr(0, &uaddr);
-  //printf("ok this is why yeah\n");
   struct mmapinfo mmap_info = {0};
   struct proc *p = myproc();
-  //printf("hihiih\n");
   mmap_info.total_mmaps = p->total_mmaps;
   int ctr = 0;
   for(int i = 0; i < MAX_MMAPS; ++i) {
@@ -139,9 +137,7 @@ sys_getmmapinfo(void)
     mmap_info.n_loaded_pages[ctr] = p->mappings[i].shared->num_allocated;
     ++ctr;
   }
-  //printf("KOFKS\n");
   either_copyout(1, uaddr, &mmap_info, sizeof(mmap_info));
-  //printf("FDS\n");
   return 0;
 }
 
@@ -271,8 +267,6 @@ sys_mmap(void)
     if(candidate_segment == NULL && (length <= seg->end - seg->start)) {
       candidate_segment = seg;
     }
-    //printf("%lx\n", seg->start);
-    //printf("%lx\n", seg->end);
 
     // Suggested address works
     if(addr >= seg->start && addr + length <= seg->end) {

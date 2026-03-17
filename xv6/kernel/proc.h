@@ -84,15 +84,6 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
-// struct mapping {
-//   uint64 addr;
-//   uint64 length;
-//   uint flags;
-//   int is_allocated[NUM_PAGES];
-//   int num_pages_allocated;
-//   int idx;
-// }
-
 struct physical_pages {
   void *pages[NUM_PAGES];
 };
@@ -156,9 +147,3 @@ struct proc {
   struct free_segment *free_list_head;  // reverse address order
   struct free_mem_space *slots;
 };
-
-// struct {
-//   struct spinlock lock;
-//   int num_refs[NPROC * MAX_MMAPS];
-//   int num_mappings;
-// } global_mappings;
