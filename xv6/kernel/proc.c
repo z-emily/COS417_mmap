@@ -111,6 +111,7 @@ allocpid()
 static struct proc*
 allocproc(void)
 {
+  printf("ALLOCPROC");
   struct proc *p;
 
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -161,8 +162,9 @@ found:
   memset(p->slots, 0, PGSIZE);
 
   struct free_segment *segs = (struct free_segment *)(p->slots + 1);
-  for(int i = 0; i < MAX_MMAPS + 1; ++i){
+  for(int i = 0; i < MAX_MMAPS + 2; ++i){
     p->slots->free_segments[i] = &segs[i];
+    if(!p->slots->free_segments[i]) printf("FAILED");
   }
 
   p->free_list_head = p->slots->free_segments[0];
@@ -264,6 +266,36 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
+
+  struct proc *p = myproc();
+  // Free mappings
+  for(int i = 0; i < MAX_MMAPS; i++){
+    p->mappings[i].is_mapped = 0;
+    p->mappings[i].addr = 0;
+    p->mappings[i].length = 0;
+    p->mappings[i].flags = 0;
+    if (p->mappings[i].shared) {
+      kfree(p->mappings[i].shared);
+      p->mappings[i].shared = NULL;
+    }
+  }
+  p->total_mmaps = 0;
+
+  // Free segments
+  for(int i = 0; i < MAX_MMAPS + 2; i++){
+    if(!p->slots->free_segments[i]) printf("FAILED2 %d\n", i);
+    p->slots->free_segments[i]->start = 0;
+    p->slots->free_segments[i]->end = 0;
+    p->slots->free_segments[i]->prev = NULL;
+    p->slots->free_segments[i]->next = NULL;
+  }
+
+  // Reset free list
+  p->free_list_head = p->slots->free_segments[0];
+  p->free_list_head->start = PGROUNDUP(p->sz);
+  p->free_list_head->end = TRAPFRAME;
+  p->free_list_head->prev = NULL;
+  p->free_list_head->next = NULL;
 }
 
 // Set up first user process.
@@ -310,6 +342,7 @@ growproc(int n)
 int
 kfork(void)
 {
+  printf("KFORK");
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
@@ -376,6 +409,12 @@ kfork(void)
       }
     }
   }
+
+  // Copy slots
+  for(int i = 0; i < MAX_MMAPS + 2; i++){
+    np->slots->free_segments[i] = p->slots->free_segments[i];
+  }
+  np->free_list_head = p->free_list_head;
   return pid;
 }
 

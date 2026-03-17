@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 #include "elf.h"
+#include <stdlib.h>
 
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 
@@ -26,6 +27,7 @@ int flags2perm(int flags)
 int
 kexec(char *path, char **argv)
 {
+  printf("KEXEC");
   char *s, *last;
   int i, off;
   uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;

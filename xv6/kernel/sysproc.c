@@ -147,7 +147,11 @@ sys_getmmapinfo(void)
 
 static void
 remove_segment(struct free_segment *seg, struct proc *p) {
+  printf("REMOVE SEGMENT\n");
+  printf("[%lx, %lx)\n", seg->start, seg->end);
   if(seg->prev) {
+    printf("has previous");
+    printf("prev seg [%lx, %lx)\n", seg->prev->start, seg->prev->end);
     seg->prev->next = seg->next;
     if(seg->next) seg->next->prev = seg->prev;
   }
@@ -155,6 +159,8 @@ remove_segment(struct free_segment *seg, struct proc *p) {
     p->free_list_head = seg->next;
     if(seg->next) seg->next->prev = NULL;
   }
+
+  if (seg->next) printf("next seg [%lx, %lx)\n", seg->next->start, seg->next->end);
 
   seg->start = 0;
   seg->end = 0;
@@ -211,12 +217,12 @@ struct free_segment *create_segment(struct proc *p){
 
 void print_free_segs(struct proc *p) {
   struct free_segment *seg = p->free_list_head;
-  printf("PRINT SEGMENTS: ");
+  printf("-------\n");
   while(seg){
     printf("[%lx, %lx)\n", seg->start, seg->end);
     seg = seg->next;
   }
-  printf("END PRINT SEGMENTS\n");
+  printf("-------\n");
 }
 
 uint64
@@ -329,6 +335,8 @@ sys_mmap(void)
       // add to mappings
       add_to_mappings(p, addr, length, flags);
       //printf("ALSO END ITER\n");
+      printf("Segments at end:\n");
+      print_free_segs(p);
       return addr;
     } /*else if(seg->end < addr && candidate_segment) {
       break;
@@ -414,21 +422,25 @@ sys_munmap(void)
         // Insert new free segment into free list
         if(high_seg->end <= map_start){
           new_seg->prev = NULL;
-          new_seg->next = p->free_list_head;
+          new_seg->next = high_seg;
           p->free_list_head = new_seg;
           high_seg->prev = new_seg;
-        }
-        printf("390\n");
-        while(high_seg) {
-          low_seg = high_seg->next;
-          if(!low_seg || low_seg->end <= map_start){
-            high_seg->next = new_seg;
-            new_seg->prev = low_seg;
-            new_seg->next = low_seg;
-            if(low_seg) low_seg->prev = new_seg;
-            break;
+          printf("inserted at head\n");
+          print_free_segs(p);
+        } else {
+          while(high_seg) {
+            low_seg = high_seg->next;
+            if(!low_seg || low_seg->end <= map_start){
+              high_seg->next = new_seg;
+              new_seg->prev = high_seg;
+              new_seg->next = low_seg;
+              if(low_seg) low_seg->prev = new_seg;
+              break;
+            }
+            high_seg = high_seg->next;
           }
-          high_seg = high_seg->next;
+          printf("inserted in the middle\n");
+          print_free_segs(p);
         }
         printf("402\n");
 
@@ -440,9 +452,12 @@ sys_munmap(void)
           if(low_seg->end == high_seg->start){
             high_seg->start = low_seg->start;
             remove_segment(low_seg, p);
+            print_free_segs(p);
+            if (high_seg->next) printf("high seg next [%lx, %lx)\n", high_seg->next->start, high_seg->next->end);
             continue;
           }
           high_seg = high_seg->next;
+          print_free_segs(p);
         }
         printf("415\n");
         
@@ -456,6 +471,8 @@ sys_munmap(void)
         --p->total_mmaps;
         printf("428\n");
         
+        printf("Segments at end:\n");
+        print_free_segs(p);
 
         return 0;
       }
