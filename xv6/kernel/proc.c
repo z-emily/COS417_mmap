@@ -266,36 +266,6 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
-
-  struct proc *p = myproc();
-  // Free mappings
-  for(int i = 0; i < MAX_MMAPS; i++){
-    p->mappings[i].is_mapped = 0;
-    p->mappings[i].addr = 0;
-    p->mappings[i].length = 0;
-    p->mappings[i].flags = 0;
-    if (p->mappings[i].shared) {
-      kfree(p->mappings[i].shared);
-      p->mappings[i].shared = NULL;
-    }
-  }
-  p->total_mmaps = 0;
-
-  // Free segments
-  for(int i = 0; i < MAX_MMAPS + 2; i++){
-    if(!p->slots->free_segments[i]) printf("FAILED2 %d\n", i);
-    p->slots->free_segments[i]->start = 0;
-    p->slots->free_segments[i]->end = 0;
-    p->slots->free_segments[i]->prev = NULL;
-    p->slots->free_segments[i]->next = NULL;
-  }
-
-  // Reset free list
-  p->free_list_head = p->slots->free_segments[0];
-  p->free_list_head->start = PGROUNDUP(p->sz);
-  p->free_list_head->end = TRAPFRAME;
-  p->free_list_head->prev = NULL;
-  p->free_list_head->next = NULL;
 }
 
 // Set up first user process.
@@ -410,11 +380,26 @@ kfork(void)
     }
   }
 
-  // Copy slots
+  // Copy slots with translation
   for(int i = 0; i < MAX_MMAPS + 2; i++){
-    np->slots->free_segments[i] = p->slots->free_segments[i];
+    np->slots->free_segments[i]->start = p->slots->free_segments[i]->start;
+    np->slots->free_segments[i]->end = p->slots->free_segments[i]->end;
+    np->slots->free_segments[i]->prev = NULL;
+    np->slots->free_segments[i]->next = NULL;
+    for(int j = 0; j < MAX_MMAPS + 2; j++){
+      if(p->slots->free_segments[i]->prev == p->slots->free_segments[j])
+        np->slots->free_segments[i]->prev = np->slots->free_segments[j];
+      if(p->slots->free_segments[i]->next == p->slots->free_segments[j])
+        np->slots->free_segments[i]->next = np->slots->free_segments[j];
+    }
   }
-  np->free_list_head = p->free_list_head;
+  np->free_list_head = NULL;
+  for(int i = 0; i < MAX_MMAPS + 2; i++){
+    if(p->free_list_head == p->slots->free_segments[i]){
+      np->free_list_head = np->slots->free_segments[i];
+      break;
+    }
+  }
   return pid;
 }
 
