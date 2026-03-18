@@ -1218,18 +1218,14 @@ mmap_exec_leak_base(char *s, int realized)
     }
 
     pid = fork();
-    printf("YAY\n");
     if (pid < 0) {
       printf("%s: fork failed\n", s);
       exit(1);
     } else if (pid == 0) {
       // Child! We want to `exec` another process, which should also clear our
       // mappings---mmaps don't persist across exec calls.
-      printf("WERQ\n");
       char *args[] = { "echo", 0 };
-      printf("HIHI\n");
       exec("echo", args);
-      printf("WER\n");
       printf("%s: exec failed\n", s);
       exit(1);
     }

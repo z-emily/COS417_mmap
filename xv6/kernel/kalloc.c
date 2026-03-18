@@ -48,13 +48,8 @@ kfree(void *pa)
 {
   struct run *r;
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP){
-    if(((uint64)pa % PGSIZE) != 0) printf("ONE\n");
-    if((char*)pa < end) printf("TWO\n");
-    if((uint64)pa >= PHYSTOP) printf("THREE\n");
-
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
-  }
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);

@@ -48,15 +48,18 @@ sys_sbrk(void)
 
   argint(0, &n);
   argint(1, &t);
-  addr = myproc()->sz;
 
-  // TODO: prevent collisions
+  struct proc *p = myproc();
+  addr = p->sz;
+
+  // Prevent collisions with mappings
   for(int i = 0; i < MAX_MMAPS; ++i) {
-    if(!myproc()->mappings[i].is_mapped)
+    if(!p->mappings[i].is_mapped)
       continue;
-    if(myproc()->mappings[i].addr < addr + n)
+    if(p->mappings[i].addr < addr + n)
       return -1;
   }
+  //TODO: update free list last node if its against og p->sz, to account for += n
 
   if(t == SBRK_EAGER || n < 0) {
     if(growproc(n) < 0) {
@@ -70,7 +73,18 @@ sys_sbrk(void)
       return -1;
     if(addr + n > TRAPFRAME)
       return -1;
-    myproc()->sz += n;
+
+    // Update free list if free space has changed
+    struct free_segment *seg = p->free_list_head;
+    while(seg) {
+      if (seg->start <= PGROUNDUP(p->sz)) {
+        seg->start = PGROUNDUP(p->sz + n);
+        break;
+      }
+      seg = seg->next;
+    }
+
+    p->sz += n;
   }
   return addr;
 }
@@ -203,16 +217,6 @@ struct free_segment *create_segment(struct proc *p){
   return NULL;
 }
 
-void print_free_segs(struct proc *p) {
-  struct free_segment *seg = p->free_list_head;
-  printf("-------\n");
-  while(seg){
-    printf("[%lx, %lx)\n", seg->start, seg->end);
-    seg = seg->next;
-  }
-  printf("-------\n");
-}
-
 uint64
 sys_mmap(void)
 {
@@ -227,11 +231,6 @@ sys_mmap(void)
 
   // Check process max maps
   struct proc *p = myproc();
-
-  printf("MMAP %lx %x\n", addr, length);
-  printf("Segments at start:\n");
-  print_free_segs(p);
-
   if(p->total_mmaps >= MAX_MMAPS) {
     return 0;
   }
@@ -262,8 +261,9 @@ sys_mmap(void)
   while (seg) {
     next_seg = seg->next;
     // Save highest-address candidate segment
+    // TODO: this jit update is wrong
     if(!seg->next) 
-      seg->start = p->sz;
+      seg->start = PGROUNDUP(p->sz);
     if(candidate_segment == NULL && (length <= seg->end - seg->start)) {
       candidate_segment = seg;
     }
@@ -306,8 +306,6 @@ sys_mmap(void)
 
       // add to mappings
       add_to_mappings(p, addr, length, flags);
-      printf("Segments at end:\n");
-      print_free_segs(p);
       return addr;
     } /*else if(seg->end < addr && candidate_segment) {
       break;
@@ -342,11 +340,6 @@ sys_munmap(void)
   argaddr(0, &addr);
 
   struct proc *p = myproc();
-
-  printf("MUNMAP %lx\n", addr);
-  printf("Segments at start:\n");
-  print_free_segs(p);
-
   for (int i = 0; i < MAX_MMAPS; ++i) {
     struct mapping *map = &p->mappings[i];
     if (map->is_mapped) {
@@ -399,12 +392,7 @@ sys_munmap(void)
             continue;
           }
           high_seg = high_seg->next;
-          print_free_segs(p);
         }
-              
-        printf("Segments at end:\n");
-        print_free_segs(p);
-
         return 0;
       }
     }

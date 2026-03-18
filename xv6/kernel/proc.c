@@ -112,7 +112,6 @@ allocpid()
 static struct proc*
 allocproc(void)
 {
-  printf("ALLOCPROC\n");
   struct proc *p;
 
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -165,7 +164,6 @@ found:
   struct free_segment *segs = (struct free_segment *)(p->slots + 1);
   for(int i = 0; i < MAX_MMAPS + 2; ++i){
     p->slots->free_segments[i] = &segs[i];
-    if(!p->slots->free_segments[i]) printf("FAILED");
   }
 
   p->free_list_head = p->slots->free_segments[0];
@@ -323,7 +321,6 @@ growproc(int n)
 int
 kfork(void)
 {
-  printf("KFORK\n");
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
@@ -378,17 +375,6 @@ kfork(void)
     // increase underlying mapping refcount
     struct underlying_mapping *s = p->mappings[i].shared;
     ++s->ref_count;
-    // DON'T map all pages - lazy
-    /*for(int j = 0; j < NUM_PAGES; ++j){
-      if(s->phys_pages->pages[j]){
-        uint64 va = p->mappings[i].addr + j * PGSIZE;
-        uint64 pa = (uint64)s->phys_pages->pages[j];
-
-        if(mappages(np->pagetable, va, PGSIZE, pa, PTE_R | PTE_W | PTE_U) != 0){
-          panic("kfork");
-        }
-      }
-    }*/
   }
 
   // Copy slots with translation
@@ -422,9 +408,6 @@ kfork(void)
       break;
     }
   }
-
-  printf("KFORKEND\n");
-
   return pid;
 }
 

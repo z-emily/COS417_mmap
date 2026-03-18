@@ -28,7 +28,6 @@ int flags2perm(int flags)
 int
 kexec(char *path, char **argv)
 {
-  printf("KEXEC\n");
   char *s, *last;
   int i, off;
   uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;
@@ -146,7 +145,6 @@ kexec(char *path, char **argv)
 
   // Free segments
   for(int i = 0; i < MAX_MMAPS + 2; i++){
-    if(!p->slots->free_segments[i]) printf("FAILED2 %d\n", i);
     p->slots->free_segments[i]->start = 0;
     p->slots->free_segments[i]->end = 0;
     p->slots->free_segments[i]->prev = NULL;
