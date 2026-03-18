@@ -443,7 +443,6 @@ sys_exec(void)
     return -1;
   }
   memset(argv, 0, sizeof(argv));
-
   for(i=0;; i++){
     if(i >= NELEM(argv)){
       goto bad;

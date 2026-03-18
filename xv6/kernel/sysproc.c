@@ -59,7 +59,6 @@ sys_sbrk(void)
     if(p->mappings[i].addr < addr + n)
       return -1;
   }
-  //TODO: update free list last node if its against og p->sz, to account for += n
 
   if(t == SBRK_EAGER || n < 0) {
     if(growproc(n) < 0) {
@@ -136,11 +135,12 @@ sys_uptime(void)
 uint64
 sys_getmmapinfo(void)
 {
-  // TODO: implement!
   uint64 uaddr;
   argaddr(0, &uaddr);
+
   struct mmapinfo mmap_info = {0};
   struct proc *p = myproc();
+
   mmap_info.total_mmaps = p->total_mmaps;
   int ctr = 0;
   for(int i = 0; i < MAX_MMAPS; ++i) {
@@ -151,6 +151,7 @@ sys_getmmapinfo(void)
     mmap_info.n_loaded_pages[ctr] = p->mappings[i].shared->num_allocated;
     ++ctr;
   }
+
   either_copyout(1, uaddr, &mmap_info, sizeof(mmap_info));
   return 0;
 }
@@ -209,7 +210,7 @@ add_to_mappings(struct proc *p, uint64 addr, int length, int flags) {
 
 struct free_segment *create_segment(struct proc *p){
   for(int i = 0; i < MAX_MMAPS + 2; ++i){
-    struct free_segment *seg = p->slots->free_segments[i];
+    struct free_segment *seg = p->segment_pool->free_segments[i];
     if(!seg->start && !seg->end){
       return seg;
     }
@@ -220,7 +221,6 @@ struct free_segment *create_segment(struct proc *p){
 uint64
 sys_mmap(void)
 {
-  // TODO: implement!
   uint64 addr;
   int length;
   int flags;
@@ -261,9 +261,6 @@ sys_mmap(void)
   while (seg) {
     next_seg = seg->next;
     // Save highest-address candidate segment
-    // TODO: this jit update is wrong
-    if(!seg->next) 
-      seg->start = PGROUNDUP(p->sz);
     if(candidate_segment == NULL && (length <= seg->end - seg->start)) {
       candidate_segment = seg;
     }
@@ -307,9 +304,9 @@ sys_mmap(void)
       // add to mappings
       add_to_mappings(p, addr, length, flags);
       return addr;
-    } /*else if(seg->end < addr && candidate_segment) {
+    } else if(seg->end < addr && candidate_segment) {
       break;
-    }*/
+    }
     seg = next_seg;
   }
   // Didn't fit at suggested address
@@ -344,10 +341,6 @@ sys_munmap(void)
     struct mapping *map = &p->mappings[i];
     if (map->is_mapped) {
       if (map->addr == addr) {
-        // printf("366\n");
-        // if (map->shared == NULL) {
-        //   printf("map  SHARED is null");
-        // }
         uint64 map_start = map->addr;
         uint64 map_end = map_start + map->length;
 

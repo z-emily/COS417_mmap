@@ -84,28 +84,32 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
-struct physical_pages {
+// Stores pointers to physical pages backing a mapping
+struct page_array {
   void *pages[NUM_PAGES];
 };
 
+// Represents the physical underlying mapping for one mapping
 struct underlying_mapping {
-  int ref_count;
-  int num_allocated;
-  struct physical_pages *phys_pages;
+  int ref_count;                        // Number of processes referencing this mapping
+  int num_allocated;                    // Number of physical pages allocated
+  struct page_array *phys_pages;        // Pointer to array of physical pages
 };
 
+// Represents a virtual memory mapping
 struct mapping {
-  int is_mapped;
+  int is_mapped;                        // Is currently in use
 
-  uint64 addr;
-  uint64 length;
+  uint64 addr;                          // Starting virtual address
+  uint64 length;                        // Length of the mapping
   uint flags;
 
-  struct underlying_mapping *shared;
+  struct underlying_mapping *shared;    // Pointer to shared underlying physical mapping
 };
 
+// Represents a contiguous free virtual address region in the process.
+// The region refers to the interval [start, end)
 struct free_segment {
-  // [start, end)
   uint64 start;
   uint64 end;
 
@@ -113,7 +117,8 @@ struct free_segment {
   struct free_segment *next;
 };
 
-struct free_mem_space {
+// Container holding the free_segment structures
+struct segment_pool {
   struct free_segment *free_segments[MAX_MMAPS + 2];
 };
 
@@ -141,9 +146,10 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 
-  // mappings
-  uint total_mmaps;
-  struct mapping mappings[MAX_MMAPS];
-  struct free_segment *free_list_head;  // reverse address order
-  struct free_mem_space *slots;
+  // Memory mappings structures
+  uint total_mmaps;                     // Number of active memory mappings
+  struct mapping mappings[MAX_MMAPS];   // Table of mappings
+
+  struct free_segment *free_list_head;  // Free intervals are sorted by high to low addresses
+  struct segment_pool *segment_pool;    // Pointer to container of free segments
 };

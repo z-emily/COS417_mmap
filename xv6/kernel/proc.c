@@ -148,25 +148,20 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-  /*
-  // Set up free list
-  p->free_list_head = (struct free_segment*)kalloc();
-  p->free_list_head->start = 0;
-  p->free_list_head->end = TRAPFRAME;
-  p->free_list_head->prev = NULL;
-  p->free_list_head->next = NULL;
-  */
-  p->slots = (struct free_mem_space*)kalloc();
-  if(!p->slots)
-    panic("kalloc failed");
-  memset(p->slots, 0, PGSIZE);
 
-  struct free_segment *segs = (struct free_segment *)(p->slots + 1);
+  // Allocate segment pool
+  p->segment_pool = (struct segment_pool*)kalloc();
+  if(!p->segment_pool)
+    panic("kalloc failed");
+  memset(p->segment_pool, 0, PGSIZE);
+
+  struct free_segment *segs = (struct free_segment *)(p->segment_pool + 1);
   for(int i = 0; i < MAX_MMAPS + 2; ++i){
-    p->slots->free_segments[i] = &segs[i];
+    p->segment_pool->free_segments[i] = &segs[i];
   }
 
-  p->free_list_head = p->slots->free_segments[0];
+  // Initialize free list
+  p->free_list_head = p->segment_pool->free_segments[0];
   p->free_list_head->start = PGROUNDUP(p->sz);
   p->free_list_head->end = TRAPFRAME;
   p->free_list_head->prev = NULL;
@@ -175,6 +170,8 @@ found:
   return p;
 }
 
+// Unmaps and frees a mapping. Decrements the shared ref count and
+// releases physical pages if no references remain. Resets mapping fields.
 void free_mapping(pagetable_t pagetable, struct mapping *m) {
   if (!m->is_mapped)
     return;
@@ -215,9 +212,10 @@ freeproc(struct proc *p)
   }
   p->total_mmaps = 0;
 
-  if(p->slots){
-    kfree(p->slots);
-    p->slots = 0;
+  // free segments
+  if(p->segment_pool){
+    kfree(p->segment_pool);
+    p->segment_pool = 0;
   }
 
   if(p->pagetable)
@@ -377,37 +375,18 @@ kfork(void)
     ++s->ref_count;
   }
 
-  // Copy slots with translation
+  // Copy segment pool and free list structure
+  struct free_segment **p_segs = p->segment_pool->free_segments;
+  struct free_segment **c_segs = np->segment_pool->free_segments;
   for(int i = 0; i < MAX_MMAPS + 2; i++){
-    np->slots->free_segments[i]->start = p->slots->free_segments[i]->start;
-    np->slots->free_segments[i]->end = p->slots->free_segments[i]->end;
-    // Remap prev/next pointers to child's corresponding segments
-    np->slots->free_segments[i]->prev = NULL;
-    np->slots->free_segments[i]->next = NULL;
-    if(p->slots->free_segments[i]->prev != NULL) {
-      for(int j = 0; j < MAX_MMAPS + 2; j++){
-        if(p->slots->free_segments[i]->prev == p->slots->free_segments[j]){
-          np->slots->free_segments[i]->prev = np->slots->free_segments[j];
-          break;
-        }
-      }
-    }
-    if(p->slots->free_segments[i]->next != NULL) {
-      for(int j = 0; j < MAX_MMAPS + 2; j++){
-        if(p->slots->free_segments[i]->next == p->slots->free_segments[j]){
-          np->slots->free_segments[i]->next = np->slots->free_segments[j];
-          break;
-        }
-      }
-    }
+    c_segs[i]->start = p_segs[i]->start;
+    c_segs[i]->end   = p_segs[i]->end;
+
+    // Pointer subtraction to get index
+    c_segs[i]->prev = p_segs[i]->prev ? c_segs[p_segs[i]->prev - p_segs[0]] : NULL;
+    c_segs[i]->next = p_segs[i]->next ? c_segs[p_segs[i]->next - p_segs[0]] : NULL;
   }
-  np->free_list_head = NULL;
-  for(int i = 0; i < MAX_MMAPS + 2; i++){
-    if(p->free_list_head == p->slots->free_segments[i]){
-      np->free_list_head = np->slots->free_segments[i];
-      break;
-    }
-  }
+  np->free_list_head = c_segs[p->free_list_head - p_segs[0]];
   return pid;
 }
 
