@@ -233,31 +233,7 @@ static void
 add_to_mappings(struct proc *p, uint64 addr, int length, int flags) {
   for (int i = 0; i < MAX_MMAPS; ++i) {
     if (!p->mappings[i].is_mapped) {
-
-      // TODO: this is incredibly inefficient need to similar have mapping pool?
-      // make a pool of underlying mappings max 64 procs, max 64 mappings = 4096 entries
-      // each underlying mapping is 10 bytes?
-      // need 10 4kb pages, how to get this consecutive? is this even possible
-      // kalloc gives you one page
-      // or maybe we divide the indexes and just refernce different pages, nonsecutive in memory
-      // this would also avoid allocating more pages for the underlying mappings than necessary
-      // so keep a global array of size 10 of pointers to the beginnings of each of the pages
       struct underlying_mapping *s = alloc_underlying();
-      // struct underlying_mapping *s = kalloc();
-
-       // Initialize
-        // s->is_used = 1;
-        // s->ref_count = 1;
-        // s->num_allocated = 0;
-
-        // s->phys_pages = kalloc();
-        // if (s->phys_pages == 0)
-        //   panic("kalloc phys_pages");
-        // memset(s->phys_pages, 0, PGSIZE);
-
-      // TODO: potentially uncomment/get rid of this
-      // for(int i = 0; i < NUM_PAGES; ++i)
-      //   s->phys_pages->pages[i] = 0;
 
       p->mappings[i] = (struct mapping){
         .is_mapped = 1,

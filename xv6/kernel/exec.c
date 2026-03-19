@@ -135,25 +135,7 @@ kexec(char *path, char **argv)
   }
   p->total_mmaps = 0;
 
-  // Free underlying pools
-  for (int i = 0; i < MAX_POOLS; i++) {
-    struct underlying_pool *pool = underlying_pools[i];
-    if (!pool)
-        continue;
-
-    uint8 empty = 1;
-    for (int j = 0; j < UNDERLYING_PER_PG; j++) {
-        if (pool->mappings[j].is_used) {
-            empty = 0;
-            break;
-        }
-    }
-
-    if (empty) {
-        kfree(pool);
-        underlying_pools[i] = 0;
-    }
-  }
+  free_underlying_pools();
 
   // Commit to the user image.
   oldpagetable = p->pagetable;
