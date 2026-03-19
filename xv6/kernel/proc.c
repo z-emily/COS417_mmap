@@ -29,6 +29,8 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+struct underlying_pool *underlying_pools[MAX_POOLS];
+
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
@@ -155,13 +157,8 @@ found:
     panic("kalloc failed");
   memset(p->segment_pool, 0, PGSIZE);
 
-  struct free_segment *segs = (struct free_segment *)(p->segment_pool + 1);
-  for(int i = 0; i < MAX_MMAPS + 2; ++i){
-    p->segment_pool->free_segments[i] = &segs[i];
-  }
-
   // Initialize free list
-  p->free_list_head = p->segment_pool->free_segments[0];
+  p->free_list_head = &p->segment_pool->free_segments[0];
   p->free_list_head->start = PGROUNDUP(p->sz);
   p->free_list_head->end = TRAPFRAME;
   p->free_list_head->prev = NULL;
@@ -186,7 +183,11 @@ void free_mapping(pagetable_t pagetable, struct mapping *m) {
         kfree(s->phys_pages->pages[j]);
     }
     kfree(s->phys_pages);
-    kfree(s);
+
+    s->is_used = 0;
+    s->num_allocated = 0;
+    s->ref_count = 0;
+    s->phys_pages = NULL;
   }
 
   m->is_mapped = 0;
@@ -207,10 +208,30 @@ freeproc(struct proc *p)
   p->trapframe = 0;
 
   // free mmap mappings
-  for(int i = 0; i < MAX_MMAPS; i++){
+  for(int i = 0; i < MAX_MMAPS; ++i){
     free_mapping(p->pagetable, &p->mappings[i]);
   }
   p->total_mmaps = 0;
+
+  // Free underlying pools
+  for (int i = 0; i < MAX_POOLS; i++) {
+    struct underlying_pool *pool = underlying_pools[i];
+    if (!pool)
+        continue;
+
+    uint8 empty = 1;
+    for (int j = 0; j < UNDERLYING_PER_PG; j++) {
+        if (pool->mappings[j].is_used) {
+            empty = 0;
+            break;
+        }
+    }
+
+    if (empty) {
+        kfree(pool);
+        underlying_pools[i] = 0;
+    }
+    }
 
   // free segments
   if(p->segment_pool){
@@ -364,7 +385,7 @@ kfork(void)
 
   // Copy mmap information
   np->total_mmaps = p->total_mmaps;
-  for(int i = 0; i < MAX_MMAPS; i++){
+  for(int i = 0; i < MAX_MMAPS; ++i){
     if(!p->mappings[i].is_mapped)
       continue;
 
@@ -376,17 +397,17 @@ kfork(void)
   }
 
   // Copy segment pool and free list structure
-  struct free_segment **p_segs = p->segment_pool->free_segments;
-  struct free_segment **c_segs = np->segment_pool->free_segments;
-  for(int i = 0; i < MAX_MMAPS + 2; i++){
-    c_segs[i]->start = p_segs[i]->start;
-    c_segs[i]->end   = p_segs[i]->end;
+  struct free_segment *p_segs = p->segment_pool->free_segments;
+  struct free_segment *c_segs = np->segment_pool->free_segments;
+  for(int i = 0; i < MAX_MMAPS + 2; ++i){
+    c_segs[i].start = p_segs[i].start;
+    c_segs[i].end   = p_segs[i].end;
 
     // Pointer subtraction to get index
-    c_segs[i]->prev = p_segs[i]->prev ? c_segs[p_segs[i]->prev - p_segs[0]] : NULL;
-    c_segs[i]->next = p_segs[i]->next ? c_segs[p_segs[i]->next - p_segs[0]] : NULL;
+    c_segs[i].prev = p_segs[i].prev ? &c_segs[p_segs[i].prev - &p_segs[0]] : NULL;
+    c_segs[i].next = p_segs[i].next ? &c_segs[p_segs[i].next - &p_segs[0]] : NULL;
   }
-  np->free_list_head = c_segs[p->free_list_head - p_segs[0]];
+  np->free_list_head = &c_segs[p->free_list_head - &p_segs[0]];
   return pid;
 }
 

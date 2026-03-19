@@ -12,4 +12,6 @@
 #define FSSIZE       2000  // size of file system in blocks
 #define MAXPATH      128   // maximum file path name
 #define USERSTACK    1     // user stack pages
+#define UNDERLYING_PER_PG (PGSIZE / sizeof(struct underlying_mapping))
+#define MAX_POOLS (NPROC * MAX_MMAPS / UNDERLYING_PER_PG)
 

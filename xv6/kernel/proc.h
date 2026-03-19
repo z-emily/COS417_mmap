@@ -1,4 +1,5 @@
 #include "mmap.h"
+#include "param.h"
 #define NUM_PAGES 512
 
 // Saved registers for kernel context switches.
@@ -91,14 +92,26 @@ struct page_array {
 
 // Represents the physical underlying mapping for one mapping
 struct underlying_mapping {
-  int ref_count;                        // Number of processes referencing this mapping
-  int num_allocated;                    // Number of physical pages allocated
+  uint8 is_used;                        // Is currently in use
+
+  uint8 ref_count;                      // Number of processes referencing this mapping
+  uint16 num_allocated;                 // Number of physical pages allocated
+
   struct page_array *phys_pages;        // Pointer to array of physical pages
 };
 
+// Container holding the underlying_mapping structures, fits on one page
+struct underlying_pool {
+  struct underlying_mapping mappings[UNDERLYING_PER_PG];
+};
+
+// Need multiple pages of these pools to cover all possible
+// NPROC * MAX_MMAPS underlying_mapping objects
+ extern struct underlying_pool *underlying_pools[MAX_POOLS];
+
 // Represents a virtual memory mapping
 struct mapping {
-  int is_mapped;                        // Is currently in use
+  uint8 is_mapped;                      // Is currently in use
 
   uint64 addr;                          // Starting virtual address
   uint64 length;                        // Length of the mapping
@@ -119,7 +132,7 @@ struct free_segment {
 
 // Container holding the free_segment structures
 struct segment_pool {
-  struct free_segment *free_segments[MAX_MMAPS + 2];
+  struct free_segment free_segments[MAX_MMAPS + 2];
 };
 
 // Per-process state

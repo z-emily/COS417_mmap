@@ -130,10 +130,30 @@ kexec(char *path, char **argv)
   safestrcpy(p->name, last, sizeof(p->name));
     
   // Free mappings
-  for(int i = 0; i < MAX_MMAPS; i++){
+  for(int i = 0; i < MAX_MMAPS; ++i){
     free_mapping(p->pagetable, &p->mappings[i]);
   }
   p->total_mmaps = 0;
+
+  // Free underlying pools
+  for (int i = 0; i < MAX_POOLS; i++) {
+    struct underlying_pool *pool = underlying_pools[i];
+    if (!pool)
+        continue;
+
+    uint8 empty = 1;
+    for (int j = 0; j < UNDERLYING_PER_PG; j++) {
+        if (pool->mappings[j].is_used) {
+            empty = 0;
+            break;
+        }
+    }
+
+    if (empty) {
+        kfree(pool);
+        underlying_pools[i] = 0;
+    }
+  }
 
   // Commit to the user image.
   oldpagetable = p->pagetable;
@@ -145,14 +165,14 @@ kexec(char *path, char **argv)
 
   // Free segments
   for(int i = 0; i < MAX_MMAPS + 2; i++){
-    p->segment_pool->free_segments[i]->start = 0;
-    p->segment_pool->free_segments[i]->end = 0;
-    p->segment_pool->free_segments[i]->prev = NULL;
-    p->segment_pool->free_segments[i]->next = NULL;
+    p->segment_pool->free_segments[i].start = 0;
+    p->segment_pool->free_segments[i].end = 0;
+    p->segment_pool->free_segments[i].prev = NULL;
+    p->segment_pool->free_segments[i].next = NULL;
   }
 
   // Reset free list
-  p->free_list_head = p->segment_pool->free_segments[0];
+  p->free_list_head = &p->segment_pool->free_segments[0];
   p->free_list_head->start = PGROUNDUP(p->sz);
   p->free_list_head->end = TRAPFRAME;
   p->free_list_head->prev = NULL;

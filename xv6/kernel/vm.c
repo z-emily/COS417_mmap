@@ -455,7 +455,7 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 }
 
 struct mapping *find_mapping(struct proc *p, uint64 va){
-  for(int i = 0; i < MAX_MMAPS; i++){
+  for(int i = 0; i < MAX_MMAPS; ++i){
     struct mapping *cur = &p->mappings[i];
     if(cur->is_mapped && va >= cur->addr && va < cur->addr + cur->length)
       return cur;
@@ -478,6 +478,10 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
     if(!m) return 0;
     //Allocate mapping if needed
     int pgidx = (PGROUNDDOWN(va) - m->addr)/PGSIZE;
+    // TODO: debug print
+    if (pgidx < 0 || pgidx >= NUM_PAGES) {
+      panic("vmfault: pgidx out of bounds");
+    }
     if(!m->shared->phys_pages->pages[pgidx]){ //alloc page
       m->shared->phys_pages->pages[pgidx] = kalloc();
       if(!m->shared->phys_pages->pages[pgidx]) //fail

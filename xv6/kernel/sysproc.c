@@ -138,10 +138,11 @@ sys_getmmapinfo(void)
   uint64 uaddr;
   argaddr(0, &uaddr);
 
-  struct mmapinfo mmap_info = {0};
   struct proc *p = myproc();
-
+  struct mmapinfo mmap_info = {0};
   mmap_info.total_mmaps = p->total_mmaps;
+
+  // Populate mmap info
   int ctr = 0;
   for(int i = 0; i < MAX_MMAPS; ++i) {
     if(!p->mappings[i].is_mapped)
@@ -156,6 +157,8 @@ sys_getmmapinfo(void)
   return 0;
 }
 
+// Removes a segment from the process’s free list, updates neighboring links
+// (and free list head if needed), and clears the segment’s fields
 static void
 remove_segment(struct free_segment *seg, struct proc *p) {
   if(seg->prev) {
@@ -173,26 +176,88 @@ remove_segment(struct free_segment *seg, struct proc *p) {
   seg->next = NULL;
 }
 
+// Finds and returns an unused free segment from the pool,
+// or NULL if none are available.
+struct free_segment *alloc_segment(struct proc *p){
+  for(int i = 0; i < MAX_MMAPS + 2; ++i){
+    struct free_segment *seg = &p->segment_pool->free_segments[i];
+    if(!seg->start && !seg->end){
+      return seg;
+    }
+  }
+  return NULL;
+}
+
+// Scans pool pages for a free slot, allocating a new pool page if needed.
+// Marks the slot as used, initializes fields, and allocates phys_pages.
+// Panics if no free slots remain.
+static struct underlying_mapping *
+alloc_underlying(void) {
+  for (int i = 0; i < MAX_POOLS; i++) {
+    // If this pool page hasn't been allocated yet, allocate it
+    if (underlying_pools[i] == 0) {
+      underlying_pools[i] = (struct underlying_pool *)kalloc();
+      if (underlying_pools[i] == 0)
+        panic("kalloc underlying_pool");
+
+      memset(underlying_pools[i], 0, PGSIZE);
+    }
+
+    // Search for a free slot in this pool
+    struct underlying_pool *pool = underlying_pools[i];
+    for (int j = 0; j < UNDERLYING_PER_PG; j++) {
+      if (!pool->mappings[j].is_used) {
+        struct underlying_mapping *s = &pool->mappings[j];
+
+        // Initialize
+        s->is_used = 1;
+        s->ref_count = 1;
+        s->num_allocated = 0;
+
+        s->phys_pages = kalloc();
+        if (s->phys_pages == 0)
+          panic("kalloc phys_pages");
+        memset(s->phys_pages, 0, PGSIZE);
+
+        return s;
+      }
+    }
+  }
+  panic("alloc_underlying: out of mappings");
+  return 0;
+}
+
+// Adds a new memory mapping to the process, allocating and initializing
+// the underlying mapping, and recording in the first free mapping slot.
 static void
 add_to_mappings(struct proc *p, uint64 addr, int length, int flags) {
   for (int i = 0; i < MAX_MMAPS; ++i) {
     if (!p->mappings[i].is_mapped) {
 
-      struct underlying_mapping *s = kalloc();
-      if(s == 0)
-        panic("kalloc underlying_mapping");
-      memset(s, 0, PGSIZE);
+      // TODO: this is incredibly inefficient need to similar have mapping pool?
+      // make a pool of underlying mappings max 64 procs, max 64 mappings = 4096 entries
+      // each underlying mapping is 10 bytes?
+      // need 10 4kb pages, how to get this consecutive? is this even possible
+      // kalloc gives you one page
+      // or maybe we divide the indexes and just refernce different pages, nonsecutive in memory
+      // this would also avoid allocating more pages for the underlying mappings than necessary
+      // so keep a global array of size 10 of pointers to the beginnings of each of the pages
+      struct underlying_mapping *s = alloc_underlying();
+      // struct underlying_mapping *s = kalloc();
 
-      s->ref_count = 1;
-      s->num_allocated = 0;
+       // Initialize
+        // s->is_used = 1;
+        // s->ref_count = 1;
+        // s->num_allocated = 0;
 
-      s->phys_pages = kalloc();
-      if(s->phys_pages == 0)
-        panic("kalloc underlying mapping");
-      memset(s->phys_pages, 0, PGSIZE);
+        // s->phys_pages = kalloc();
+        // if (s->phys_pages == 0)
+        //   panic("kalloc phys_pages");
+        // memset(s->phys_pages, 0, PGSIZE);
 
-      for(int i = 0; i < NUM_PAGES; ++i)
-        s->phys_pages->pages[i] = 0;
+      // TODO: potentially uncomment/get rid of this
+      // for(int i = 0; i < NUM_PAGES; ++i)
+      //   s->phys_pages->pages[i] = 0;
 
       p->mappings[i] = (struct mapping){
         .is_mapped = 1,
@@ -206,16 +271,6 @@ add_to_mappings(struct proc *p, uint64 addr, int length, int flags) {
       return;
     }
   }
-}
-
-struct free_segment *create_segment(struct proc *p){
-  for(int i = 0; i < MAX_MMAPS + 2; ++i){
-    struct free_segment *seg = p->segment_pool->free_segments[i];
-    if(!seg->start && !seg->end){
-      return seg;
-    }
-  }
-  return NULL;
 }
 
 uint64
@@ -271,7 +326,7 @@ sys_mmap(void)
       uint64 map_end = addr + length;
       if(map_start != seg->start && map_end != seg->end) {
         // Free segment is partitioned into two segments
-        struct free_segment *new_seg = create_segment(p);
+        struct free_segment *new_seg = alloc_segment(p);
         if(!new_seg){
           return 0;
         }
@@ -348,7 +403,7 @@ sys_munmap(void)
         --p->total_mmaps;
 
         // Update free list
-        struct free_segment *new_seg = create_segment(p);
+        struct free_segment *new_seg = alloc_segment(p);
         new_seg->start = map_start;
         new_seg->end = map_end;
 
