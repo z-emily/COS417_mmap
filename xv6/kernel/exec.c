@@ -146,7 +146,7 @@ kexec(char *path, char **argv)
   proc_freepagetable(oldpagetable, oldsz);
 
   // Free segments
-  for(int i = 0; i < MAX_MMAPS + 2; i++){
+  for(int i = 0; i < MAX_MMAPS + 2; ++i) {
     p->segment_pool->free_segments[i].start = 0;
     p->segment_pool->free_segments[i].end = 0;
     p->segment_pool->free_segments[i].prev = NULL;

@@ -193,7 +193,7 @@ struct free_segment *alloc_segment(struct proc *p){
 // Panics if no free slots remain.
 static struct underlying_mapping *
 alloc_underlying(void) {
-  for (int i = 0; i < MAX_POOLS; i++) {
+  for (int i = 0; i < MAX_POOLS; ++i) {
     // If this pool page hasn't been allocated yet, allocate it
     if (underlying_pools[i] == 0) {
       underlying_pools[i] = (struct underlying_pool *)kalloc();
@@ -205,7 +205,7 @@ alloc_underlying(void) {
 
     // Search for a free slot in this pool
     struct underlying_pool *pool = underlying_pools[i];
-    for (int j = 0; j < UNDERLYING_PER_PG; j++) {
+    for (int j = 0; j < UNDERLYING_PER_PG; ++j) {
       if (!pool->mappings[j].is_used) {
         struct underlying_mapping *s = &pool->mappings[j];
 
@@ -363,7 +363,6 @@ sys_mmap(void)
 uint64
 sys_munmap(void)
 {
-  // TODO: implement!
   uint64 addr;
   argaddr(0, &addr);
 

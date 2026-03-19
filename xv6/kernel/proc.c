@@ -178,7 +178,7 @@ void free_mapping(pagetable_t pagetable, struct mapping *m) {
   struct underlying_mapping *s = m->shared;
   --s->ref_count;
   if (s->ref_count == 0) {
-    for (int j = 0; j < NUM_PAGES; j++) {
+    for (int j = 0; j < NUM_PAGES; ++j) {
       if (s->phys_pages->pages[j])
         kfree(s->phys_pages->pages[j]);
     }
@@ -199,12 +199,12 @@ void free_mapping(pagetable_t pagetable, struct mapping *m) {
 
 // Free underlying pools
 void free_underlying_pools() {
-  for (int i = 0; i < MAX_POOLS; i++) {
+  for (int i = 0; i < MAX_POOLS; ++i) {
     struct underlying_pool *pool = underlying_pools[i];
     if (!pool) continue;
 
     uint8 empty = 1;
-    for (int j = 0; j < UNDERLYING_PER_PG; j++) {
+    for (int j = 0; j < UNDERLYING_PER_PG; ++j) {
       if (pool->mappings[j].is_used) {
         empty = 0;
         break;

@@ -1,10 +1,10 @@
 /*--------------------------------------------------------------------*/
 /* COS417 Assignment 4 - MMAP                                         */
-/* Author: Your Name Here                                             */
-/* netID: Your netID Here                                             */
-/* AI disclosure: Did you use AI for this assignment? Yes or No.      */
-/* AI explanation: If you answered yes to previous question, please   */
-/* describe your usage.                                               */
+/* Author: Jishnu Roychoudhury, Emily Zhou                            */
+/* netID: jr0664, ez3867                                              */
+/* AI disclosure: Did you use AI for this assignment? Yes             */
+/* AI explanation: For help while debugging and understanding the     */
+/* correct behavior of mmap                                           */
 /*--------------------------------------------------------------------*/
 
 #include "param.h"
@@ -473,23 +473,23 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
   uint64 mem;
   struct proc *p = myproc();
 
-  if (va >= p->sz){ //loc of mmaps - actually valid
+  // Is an mmap
+  if (va >= p->sz){
     struct mapping *m = find_mapping(p, va);
     if(!m) return 0;
-    //Allocate mapping if needed
+    
+    // Realize mapping if needed
     int pgidx = (PGROUNDDOWN(va) - m->addr)/PGSIZE;
-    // TODO: debug print
-    if (pgidx < 0 || pgidx >= NUM_PAGES) {
-      panic("vmfault: pgidx out of bounds");
-    }
-    if(!m->shared->phys_pages->pages[pgidx]){ //alloc page
+    if(!m->shared->phys_pages->pages[pgidx]){
       m->shared->phys_pages->pages[pgidx] = kalloc();
-      if(!m->shared->phys_pages->pages[pgidx]) //fail
+      if(!m->shared->phys_pages->pages[pgidx])
         return 0;
+
       memset(m->shared->phys_pages->pages[pgidx], 0, PGSIZE);
       ++m->shared->num_allocated;
     }
-    //Map mapping, only in process p
+
+    // Map mapping in process's page table
     mappages(pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)m->shared->phys_pages->pages[pgidx], m->flags | PTE_U);
     return (uint64)m->shared->phys_pages->pages[pgidx];
   }
